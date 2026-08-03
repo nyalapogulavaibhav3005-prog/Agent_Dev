@@ -1,0 +1,16 @@
+# Environment / secrets
+.env
+
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local database files (once you hit Phase 5's SQLite work)
+*.db
+*.sqlite3
+
+# ChromaDB local storage (Phase 5)
+chroma_db/
