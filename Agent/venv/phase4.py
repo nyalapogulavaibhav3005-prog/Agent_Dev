@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import json
 
+
 #making some basic tools 
 def get_current_date_time():
     return datetime.now()
@@ -162,57 +163,70 @@ tool_functions={
     "temp_converter":temp_converter
 }
 
-
 load_dotenv()
 api_key=os.getenv("GROQ_API_KEY")
 client=Groq(api_key=api_key)
 
-class conversationManager:
-    def __init__(self,system_prompt):
+class Agent:
+    def __init__(self,system_prompt,max_iterations,tools):
         self.system_prompt=system_prompt
         self.messages=[{"role":"system","content":system_prompt}]
-    
-    def add_user_message(self , msg):
+        self.tools=tools
+        self.max_iterations=max_iterations
+
+    def add_user_message(self,msg):
         self.messages.append({"role":"user","content":msg})
 
-    def get_response(self,c=0):
-        message=client.chat.completions.create(
-        messages=self.messages,
-        model="llama-3.3-70b-versatile",
-        tools=tools,
-        tool_choice="auto"
+    def call_llm(self):
+        response=client.chat.completions.create(
+            messages=self.messages,
+            model="llama-3.3-70b-versatile",
+            tools=self.tools,
+            tool_choice="auto"   
         )
-        api_reply=message.choices[0].message
-        if c>=2:
-            return api_reply.content
-        if not message.choices[0].message.tool_calls:
-            self.messages.append({"role":"assistant","content":api_reply.content,"tool_calls":api_reply.tool_calls})
-            return api_reply.content
-        else:
-            full_message=api_reply.model_dump()
-            cleaned_message={
-                "role":"assistant",
-                "content":full_message["content"],
-                "tool_calls":full_message["tool_calls"]
-            }
-            self.messages.append(cleaned_message)
-            for tool_call in api_reply.tool_calls:
-                tool_id=tool_call.id 
-                function_name=tool_call.function.name
-                arguments=json.loads(tool_call.function.arguments)
-                func=tool_functions[function_name]
-                response=func(**arguments)
-                self.messages.append({"role":"tool","tool_call_id":tool_id,"content":str(response)})
-            return self.get_response(c+1)
+        print(response.model_dump_json(indent=2))
+        api_reply=response.choices[0].message
+        return api_reply
 
-    def chat(self,inp):
-        self.add_user_message(inp)
-        return self.get_response()
+    def is_tool_call(self,api_reply):
+        if not api_reply.tool_calls:
+            return False 
+        else:
+            return True
     
-    def clear(self):
-        self.messages=[{"role":"system","content":self.system_prompt}]
-    
-    def get_history(self):
-        return (self.messages)
-manager=conversationManager("you are my assistant and you need to call the tools which i make you to call, okay ?")
-print(manager.chat("convert  9595 km to cm?"))
+    def handle_tool_calls(self,api_reply):
+        full_message=api_reply.model_dump() #changes the  json data into python dictionary. 
+        cleaned_message={
+            "role":"assistant",
+            "content":full_message["content"],
+            "tool_calls":full_message["tool_calls"]
+        }
+        self.messages.append(cleaned_message)
+        for tool_call in api_reply.tool_calls:
+            tool_id=tool_call.id 
+            function_name=tool_call.function.name
+            arguments=json.loads(tool_call.function.arguments)
+            func=tool_functions[function_name]
+            if arguments:
+                response=func(**arguments)
+            else:
+                response=func()
+            self.messages.append({"role":"tool","tool_call_id":tool_id,"content":str(response)})
+
+
+    def run(self,user_input):
+        self.add_user_message(user_input)
+        c=0
+        while c<self.max_iterations:
+            api_reply=self.call_llm()
+            if self.is_tool_call(api_reply):
+                self.handle_tool_calls(api_reply)
+                c+=1
+            else:
+                self.messages.append({"role":"assistant","content":api_reply.content})
+                print(api_reply.model_dump_json(indent=3))
+                return api_reply.content
+        return "I wasn't able to complete this within the allowed number of steps."
+
+agent=Agent("you are my buddy who helps me to calculate and tell it to me in a friendly tone",5,tools)
+print(agent.run("tell me the date and convert 10kg into grams and change the 345 c into kelvin")) # calling multiple tools at once and checking
