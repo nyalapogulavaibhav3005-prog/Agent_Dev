@@ -184,7 +184,7 @@ class Agent:
             tools=self.tools,
             tool_choice="auto"   
         )
-        print(response.model_dump_json(indent=2))
+        #print(response.model_dump_json(indent=2))
         api_reply=response.choices[0].message
         return api_reply
 
@@ -213,6 +213,18 @@ class Agent:
                 response=func()
             self.messages.append({"role":"tool","tool_call_id":tool_id,"content":str(response)})
 
+    def get_summary(self):
+        self.messages.append(
+            {
+                "role":"user",
+                "content":"Based on our conversation please summarize what you have accomplised"
+                }
+            )
+        response=client.chat.completions.create(
+                messages=self.messages,
+                model="llama-3.3-70b-versatile"
+            )
+        return response.choices[0].message.content
 
     def run(self,user_input):
         self.add_user_message(user_input)
@@ -224,9 +236,9 @@ class Agent:
                 c+=1
             else:
                 self.messages.append({"role":"assistant","content":api_reply.content})
-                print(api_reply.model_dump_json(indent=3))
+                #print(api_reply.model_dump_json(indent=3))
                 return api_reply.content
-        return "I wasn't able to complete this within the allowed number of steps."
+        return self.get_summary()
 
-agent=Agent("you are my buddy who helps me to calculate and tell it to me in a friendly tone",5,tools)
-print(agent.run("tell me the date and convert 10kg into grams and change the 345 c into kelvin")) # calling multiple tools at once and checking
+agent=Agent("you are my buddy who helps me to calculate and tell it to me in a friendly tone",1,tools)
+print(agent.run("what is 5km in miles, 10kg in grams, convert 100 fahrenheit to celsius, and tell me what time it is")) # calling multiple tools at once and checking
